@@ -10,9 +10,10 @@ library(shiny)
 library(shinythemes)
 library(bslib)
 library(plotly)
+library(here)
 
 # --- Data Loading and Initial Preparation ---
-raw_data <- read_csv("./Aggregated_Launch_Mission_Configs.csv") |>
+raw_data <- read_csv(here::here("./Aggregated_Launch_Mission_Configs.csv")) |>
   mutate(
     `Launch_Status` = as.factor(`Launch_Status`),
     across(
@@ -55,7 +56,7 @@ config_data <- raw_data |>
   )# This will be used for the scatter plot
 
 # Pre-trained XGBoost model for launch prediction
-model <- readRDS("./rocket_launch_model_boosted_tree.rds")
+model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
 
 # Choices for X and Y axis selection in the "Individual Rocket Parameters" plot
 # These MUST match R-friendly column names in 'config_data' (i.e., 'raw_data')
