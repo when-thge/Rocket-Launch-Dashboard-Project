@@ -1,0 +1,16 @@
+{
+    "name": "wetcatto",
+    "server": "shinyapps.io",
+    "account": "wetcatto",
+    "serverUrl": "https://api.shinyapps.io/v1",
+    "appId": 1234567,
+    "appGuid": "8FDA9F4DE9F675B055AB1D0AA59E9FAC",
+    "appSecret": "zb3uyCtRXHLaW/DcxlKiH6lR0lsLrRiPziQ6Xwcg",
+    "appFiles": [
+        "app.R",
+        "Aggregated_Launch_Mission_Configs.csv",
+        "rocket_launch_model_boosted_tree.rds"
+    ],
+    "appPrimaryDoc": "app.R",
+    "appMode": "shiny"
+} 

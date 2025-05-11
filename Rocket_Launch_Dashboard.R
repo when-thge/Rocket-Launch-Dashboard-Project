@@ -3,6 +3,8 @@
 # Theo Benedict Pasia
 # 2nd Year Students - University of Southeastern Philippines - Obrero Campus
 
+
+
 library(tidyverse)
 library(tidymodels)
 library(xgboost)
@@ -11,6 +13,7 @@ library(shinythemes)
 library(bslib)
 library(plotly)
 library(here)
+library(rsconnect)
 
 # --- Data Loading and Initial Preparation ---
 raw_data <- read_csv(here::here("./Aggregated_Launch_Mission_Configs.csv")) |>
@@ -39,10 +42,9 @@ data <- raw_data |>
   )
 
 # Data for the "Individual Rocket Parameters" tab plot
-# Assuming raw_data contains all necessary columns for plotting rocket parameters.
-# If specific cleaning or selection is needed for this plot, it would happen here.
 config_data <- raw_data |>
   select(
+    Rocket_Name,  # Added Rocket_Name for tooltips
     Fairing_Height, 
     Fairing_Diameter,
     Rocket_Height,
@@ -53,13 +55,17 @@ config_data <- raw_data |>
     Liftoff_Thrust,
     Payloads, 
     Mass  
-  )# This will be used for the scatter plot
+  )
 
-# Pre-trained XGBoost model for launch prediction
-model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
+# Try to load the model, but don't fail if it's not available
+model <- NULL
+tryCatch({
+  model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
+}, error = function(e) {
+  warning("Model file not found. Prediction functionality will be disabled.")
+})
 
 # Choices for X and Y axis selection in the "Individual Rocket Parameters" plot
-# These MUST match R-friendly column names in 'config_data' (i.e., 'raw_data')
 rocket_param_choices <- c(
   "Fairing_Height", 
   "Fairing_Diameter",
@@ -74,18 +80,20 @@ rocket_param_choices <- c(
 )
 
 # --- Prediction Function ---
-# Predicts launch status based on rocket parameters.
-# Arguments and internal tibble use R-friendly names matching model features.
 predict_launch <- function(Fairing_Height,   
-                           Fairing_Diameter, 
-                           Rocket_Height,    
-                           Payload_to_LEO,   
-                           Payload_to_GTO,   
-                           Stages,
-                           Strap_Ons,        
-                           Liftoff_Thrust,   
-                           Payloads,
-                           Mass) {
+                         Fairing_Diameter, 
+                         Rocket_Height,    
+                         Payload_to_LEO,   
+                         Payload_to_GTO,   
+                         Stages,
+                         Strap_Ons,        
+                         Liftoff_Thrust,   
+                         Payloads,
+                         Mass) {
+  if (is.null(model)) {
+    return("Model not available")
+  }
+  
   observation <- tibble(
     Fairing_Height = Fairing_Height,
     Fairing_Diameter = Fairing_Diameter,
@@ -118,7 +126,7 @@ ui <- page_navbar(
         accordion(
           accordion_panel(
             title = "Year",
-            icon = bsicons::bs_icon("calendar-range", size = "3rem"),
+            icon = icon("calendar"),
             sliderInput("year_slider", "Filter by Year",
                         min = min(data$Launch_Year, na.rm = TRUE), 
                         max = max(data$Launch_Year, na.rm = TRUE),
@@ -127,21 +135,21 @@ ui <- page_navbar(
           ),
           accordion_panel(
             title = "Rocket",
-            icon = bsicons::bs_icon("rocket-takeoff", size = "3rem"),
+            icon = icon("rocket"),
             selectizeInput("select_rocket", "Filter by Rocket:",
                            choices = unique(data$Rocket_Name), multiple = TRUE,
                            options = list(placeholder = "Select rocket(s)..."))
           ),
           accordion_panel(
             title = "Organization",
-            icon = bsicons::bs_icon("buildings", size = "3rem"),
+            icon = icon("building"),
             selectizeInput("select_organization", "Filter by Organization:",
                            choices = unique(data$Rocket_Organisation), multiple = TRUE,
                            options = list(placeholder = "Select Organization(s)..."))
           ),
           accordion_panel(
             title = "Launch Status",
-            icon = bsicons::bs_icon("bar-chart", size = "3rem"),
+            icon = icon("chart-bar"),
             selectizeInput("select_status", "Filter by Launch Status:",
                            choices = unique(data$Launch_Status), multiple = TRUE,
                            options = list(placeholder = "Select Status..."))
@@ -152,11 +160,44 @@ ui <- page_navbar(
         nav_panel(
           title = "Launch Counts by Year",
           layout_columns(
-            value_box(title = "Success", value = textOutput("success_vbox"), showcase = bsicons::bs_icon("check-circle-fill"), showcase_layout = "left center", theme_color = "success", height = "75px", full_screen = FALSE),
-            value_box(title = "Partial Failure", value = textOutput("partial_failure_vbox"), showcase = bsicons::bs_icon("exclamation-triangle-fill"), showcase_layout = "left center", theme_color = "warning", height = "75px", full_screen = FALSE),
-            value_box(title = "Failure", value = textOutput("failure_vbox"), showcase = bsicons::bs_icon("x-circle-fill"), showcase_layout = "left center", theme_color = "danger", height = "75px", full_screen = FALSE),
-            value_box(title = "Prelaunch Failure", value = textOutput("prelaunch_failure_vbox"), showcase = bsicons::bs_icon("dash-circle-fill"), showcase_layout = "left center", theme_color = "secondary", height = "75px", full_screen = FALSE),
-            col_widths = c(3, 3, 3, 3), row_heights = "auto"
+            value_box(
+              title = "Success", 
+              value = textOutput("success_vbox"), 
+              showcase = icon("check-circle"), 
+              showcase_layout = "left center", 
+              theme = "success", 
+              height = "75px", 
+              full_screen = FALSE
+            ),
+            value_box(
+              title = "Partial Failure", 
+              value = textOutput("partial_failure_vbox"), 
+              showcase = icon("exclamation-triangle"), 
+              showcase_layout = "left center", 
+              theme = "warning", 
+              height = "75px", 
+              full_screen = FALSE
+            ),
+            value_box(
+              title = "Failure", 
+              value = textOutput("failure_vbox"), 
+              showcase = icon("times-circle"), 
+              showcase_layout = "left center", 
+              theme = "danger", 
+              height = "75px", 
+              full_screen = FALSE
+            ),
+            value_box(
+              title = "Prelaunch Failure", 
+              value = textOutput("prelaunch_failure_vbox"), 
+              showcase = icon("minus-circle"), 
+              showcase_layout = "left center", 
+              theme = "secondary", 
+              height = "75px", 
+              full_screen = FALSE
+            ),
+            col_widths = c(3, 3, 3, 3), 
+            row_heights = "auto"
           ),
           layout_columns(
             card(plotlyOutput(outputId = "Time_series_line", height = "500px")),
@@ -191,11 +232,30 @@ ui <- page_navbar(
     )
   ),
   
-  # == Tab 3: Prediction Model (Placeholder) ==
-  nav_panel(title = "Prediction Model"),
+  # == Tab 3: Prediction Model ==
+  nav_panel(
+    title = "Prediction Model",
+    if (is.null(model)) {
+      card(
+        "The prediction model is currently unavailable. Please ensure the model file is present in the application directory."
+      )
+    } else {
+      card(
+        "Model is available and ready for predictions."
+      )
+    }
+  ),
   
-  # == Tab 4: About (Placeholder) ==
-  nav_panel(title = "About"),
+  # == Tab 4: About ==
+  nav_panel(
+    title = "About",
+    card(
+      "Rocket Launch Dashboard",
+      "This dashboard provides insights into rocket launch data, including success rates, trends, and individual rocket parameters.",
+      "Created by James Ga-as and Theo Benedict Pasia",
+      "University of Southeastern Philippines - Obrero Campus"
+    )
+  ),
   
   nav_spacer(),
   
@@ -204,7 +264,6 @@ ui <- page_navbar(
   ),
   
   theme = bs_theme(preset = "minty")
-  
 )
 
 # --- Server Logic ---
@@ -290,10 +349,10 @@ server <- function(input, output, session) {
     success_trend <- filtered_data() %>%
       mutate(is_success = case_when(Launch_Status == "Success" ~ 1, Launch_Status == "Partial Failure" ~ 0.5, TRUE ~ 0)) %>%
       group_by(Launch_Year) %>%
-      summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop") # Added na.rm = TRUE
+      summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop")
     
     trend_plot <- ggplot(success_trend, aes(x = Launch_Year, y = success_rate)) +
-      geom_line(color = "#2196F3", linewidth = 1) + # Changed size to linewidth
+      geom_line(color = "#2196F3", linewidth = 1) +
       geom_point(aes(size = total_launches, text = paste0("Year: ", Launch_Year, "<br>Success Rate: ", scales::percent(success_rate, accuracy = 0.1), "<br>Total Launches: ", total_launches)), color = "#2196F3", alpha = 0.4) +
       scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
       scale_size_continuous(range = c(2, 7)) +
@@ -303,45 +362,23 @@ server <- function(input, output, session) {
     ggplotly(trend_plot, tooltip = "text")
   })
   
-  # Plot: Scatter plot for individual rocket parameters, using 'config_data'
+  # Plot: Scatter plot for individual rocket parameters
   output$rocket_params_plot <- renderPlotly({
-    req(input$x_var_config, input$y_var_config) # Ensure X and Y variables are selected
+    req(input$x_var_config, input$y_var_config)
     
-    # Validate that config_data is loaded and has content
-    if (!exists("config_data") || is.null(config_data) || nrow(config_data) == 0) {
-      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Rocket configuration data is not loaded or is empty.", x = 0.5)))
-    }
-    # Validate that selected columns exist in config_data
-    if (!(input$x_var_config %in% names(config_data)) || !(input$y_var_config %in% names(config_data))) {
-      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Selected column(s) not found in rocket configuration data.", x = 0.5)))
-    }
-    # Validate that selected columns are numeric
-    if (!is.numeric(config_data[[input$x_var_config]]) || !is.numeric(config_data[[input$y_var_config]])) {
-      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Selected column(s) must be numeric for this plot.", x = 0.5)))
-    }
-    
-    plot_df <- config_data 
+    plot_df <- config_data
     
     p <- ggplot(plot_df, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
       geom_point(alpha = 0.7, color = "steelblue", size = 2.5) +
       labs(x = input$x_var_config, y = input$y_var_config) +
       theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
     
-    # Add informative tooltips, using 'Rocket_Name' from config_data for identification
-    # Ensure 'Rocket_Name' (or a similar identifier) exists in your 'config_data'
-    if ("Rocket_Name" %in% names(config_data)) {
-      p <- p + aes(text = paste0(
-        "Rocket: ", .data[["Rocket_Name"]], "<br>", 
-        input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
-        input$y_var_config, ": ", .data[[input$y_var_config]]
-      ))
-    } else {
-      # Fallback tooltip if 'Rocket_Name' is not found
-      p <- p + aes(text = paste0(
-        input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
-        input$y_var_config, ": ", .data[[input$y_var_config]]
-      ))
-    }
+    # Add tooltips with Rocket_Name
+    p <- p + aes(text = paste0(
+      "Rocket: ", Rocket_Name, "<br>", 
+      input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
+      input$y_var_config, ": ", .data[[input$y_var_config]]
+    ))
     
     ggplotly(p, tooltip = "text") %>%
       layout(title = list(text = paste(input$y_var_config, "vs.", input$x_var_config), x = 0.5, xanchor = 'center'))
@@ -350,4 +387,11 @@ server <- function(input, output, session) {
 
 # --- Run the Shiny Application ---
 shinyApp(ui, server)
+
+# --- Deployment Configuration ---
+rsconnect::setAccountInfo(name="wetcatto",
+                         token="8FDA9F4DE9F675B055AB1D0AA59E9FAC",
+                         secret="zb3uyCtRXHLaW/DcxlKiH6lR0lsLrRiPziQ6Xwcg")
+
+deployApp()
 
