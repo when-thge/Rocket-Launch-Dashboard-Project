@@ -3,8 +3,6 @@
 # Theo Benedict Pasia
 # 2nd Year Students - University of Southeastern Philippines - Obrero Campus
 
-
-
 library(tidyverse)
 library(tidymodels)
 library(xgboost)
@@ -13,7 +11,6 @@ library(shinythemes)
 library(bslib)
 library(plotly)
 library(here)
-library(rsconnect)
 
 # --- Data Loading and Initial Preparation ---
 raw_data <- read_csv(here::here("./Aggregated_Launch_Mission_Configs.csv")) |>
@@ -44,7 +41,7 @@ data <- raw_data |>
 # Data for the "Individual Rocket Parameters" tab plot
 config_data <- raw_data |>
   select(
-    Rocket_Name,  # Added Rocket_Name for tooltips
+    Rocket_Name, 
     Fairing_Height, 
     Fairing_Diameter,
     Rocket_Height,
@@ -57,13 +54,8 @@ config_data <- raw_data |>
     Mass  
   )
 
-# Try to load the model, but don't fail if it's not available
-model <- NULL
-tryCatch({
-  model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
-}, error = function(e) {
-  warning("Model file not found. Prediction functionality will be disabled.")
-})
+# Pre-trained XGBoost model for launch prediction
+model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
 
 # Choices for X and Y axis selection in the "Individual Rocket Parameters" plot
 rocket_param_choices <- c(
@@ -81,19 +73,15 @@ rocket_param_choices <- c(
 
 # --- Prediction Function ---
 predict_launch <- function(Fairing_Height,   
-                         Fairing_Diameter, 
-                         Rocket_Height,    
-                         Payload_to_LEO,   
-                         Payload_to_GTO,   
-                         Stages,
-                         Strap_Ons,        
-                         Liftoff_Thrust,   
-                         Payloads,
-                         Mass) {
-  if (is.null(model)) {
-    return("Model not available")
-  }
-  
+                           Fairing_Diameter, 
+                           Rocket_Height,    
+                           Payload_to_LEO,   
+                           Payload_to_GTO,   
+                           Stages,
+                           Strap_Ons,        
+                           Liftoff_Thrust,   
+                           Payloads,
+                           Mass) {
   observation <- tibble(
     Fairing_Height = Fairing_Height,
     Fairing_Diameter = Fairing_Diameter,
@@ -126,7 +114,7 @@ ui <- page_navbar(
         accordion(
           accordion_panel(
             title = "Year",
-            icon = icon("calendar"),
+            icon = bsicons::bs_icon("calendar-range", size = "3rem"),
             sliderInput("year_slider", "Filter by Year",
                         min = min(data$Launch_Year, na.rm = TRUE), 
                         max = max(data$Launch_Year, na.rm = TRUE),
@@ -135,82 +123,115 @@ ui <- page_navbar(
           ),
           accordion_panel(
             title = "Rocket",
-            icon = icon("rocket"),
+            icon = bsicons::bs_icon("rocket-takeoff", size = "3rem"),
             selectizeInput("select_rocket", "Filter by Rocket:",
                            choices = unique(data$Rocket_Name), multiple = TRUE,
                            options = list(placeholder = "Select rocket(s)..."))
           ),
           accordion_panel(
             title = "Organization",
-            icon = icon("building"),
+            icon = bsicons::bs_icon("buildings", size = "3rem"),
             selectizeInput("select_organization", "Filter by Organization:",
                            choices = unique(data$Rocket_Organisation), multiple = TRUE,
                            options = list(placeholder = "Select Organization(s)..."))
-          ),
-          accordion_panel(
-            title = "Launch Status",
-            icon = icon("chart-bar"),
-            selectizeInput("select_status", "Filter by Launch Status:",
-                           choices = unique(data$Launch_Status), multiple = TRUE,
-                           options = list(placeholder = "Select Status..."))
           )
         )
       ),
-      navset_card_tab(
-        nav_panel(
-          title = "Launch Counts by Year",
-          layout_columns(
-            value_box(
-              title = "Success", 
-              value = textOutput("success_vbox"), 
-              showcase = icon("check-circle"), 
-              showcase_layout = "left center", 
-              theme = "success", 
-              height = "75px", 
-              full_screen = FALSE
+      # Main content area for the Time Series Analysis tab (without cards)
+      div(
+        # Section 1: Graph 1 (left) with Value Boxes + Text (right)
+        layout_columns(
+          col_widths = c(7, 5), 
+          # Column 1.1: Value Boxes and First Plot
+          div(
+            h4("Launch Counts by Year & Status Overview", style = "margin-bottom: 1rem;"),
+            layout_columns(
+              value_box(
+                title = NULL, 
+                value = tags$div(
+                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
+                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Success"), # Title very small
+                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("success_vbox")) # Value smaller
+                ),
+                theme_color = "success",
+                height = "80px"
+              ),
+              value_box(
+                title = NULL,
+                value = tags$div(
+                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
+                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Partial Failure"), 
+                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("partial_failure_vbox")) 
+                ),
+                theme_color = "warning",
+                height = "80px"
+              ),
+              value_box(
+                title = NULL,
+                value = tags$div(
+                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
+                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Failure"), 
+                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("failure_vbox")) 
+                ),
+                theme_color = "danger",
+                height = "80px"
+              ),
+              value_box(
+                title = NULL,
+                value = tags$div(
+                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
+                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Prelaunch Failure"), 
+                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("prelaunch_failure_vbox")) 
+                ),
+                theme_color = "secondary",
+                height = "80px"
+              ),
+              col_widths = c(3, 3, 3, 3)
             ),
-            value_box(
-              title = "Partial Failure", 
-              value = textOutput("partial_failure_vbox"), 
-              showcase = icon("exclamation-triangle"), 
-              showcase_layout = "left center", 
-              theme = "warning", 
-              height = "75px", 
-              full_screen = FALSE
-            ),
-            value_box(
-              title = "Failure", 
-              value = textOutput("failure_vbox"), 
-              showcase = icon("times-circle"), 
-              showcase_layout = "left center", 
-              theme = "danger", 
-              height = "75px", 
-              full_screen = FALSE
-            ),
-            value_box(
-              title = "Prelaunch Failure", 
-              value = textOutput("prelaunch_failure_vbox"), 
-              showcase = icon("minus-circle"), 
-              showcase_layout = "left center", 
-              theme = "secondary", 
-              height = "75px", 
-              full_screen = FALSE
-            ),
-            col_widths = c(3, 3, 3, 3), 
-            row_heights = "auto"
+            plotlyOutput(outputId = "Time_series_line", height = "600px")
           ),
-          layout_columns(
-            card(plotlyOutput(outputId = "Time_series_line", height = "500px")),
-            col_widths = 12
+          # Column 1.2: Text for First Plot
+          div(
+            h4("Analysis: Launch Counts & Status", style = "margin-bottom: 1rem;"),
+            tags$p("The value boxes above provide a quick summary of total launch outcomes based on the current filters. Below them, the stacked bar chart visualizes the number of rocket launches each year, broken down by their outcome: Success, Partial Failure, Failure, and Prelaunch Failure."),
+            tags$p("This combination offers both an aggregate view and a detailed yearly trend of launch activity and reliability."),
+            tags$p("Use the sidebar filters to customize the data shown. You can focus on specific year ranges, rocket types, launching organizations, or particular launch statuses."),
+            tags$strong("Key observations to make:"),
+            tags$ul(
+              tags$li("Correlate the summary counts with the yearly distribution in the chart."),
+              tags$li("Identify periods of increased or decreased launch frequency."),
+              tags$li("Track changes in the proportion of successful launches versus failures over the years."),
+              tags$li("Analyze the performance of specific rockets or organizations if filtered.")
+            )
           )
         ),
-        nav_panel(
-          title = "Success Rate Trend Over Time",
-          card(plotlyOutput(outputId = "success_rate_trend", height = "600px"))
+        
+        br(), # Vertical spacing between the two main sections
+        
+        # Section 2: Text (left) + Graph 2 (right)
+        layout_columns(
+          col_widths = c(5, 7), 
+          # Column 2.1: Text for Second Plot
+          div(
+            h4("Analysis: Success Rate Trend", style = "margin-bottom: 1rem;"),
+            tags$p("This line graph plots the launch success rate trend over the selected years. The success rate is calculated considering full successes and partial successes (weighted). The size of each point on the line indicates the total number of launches for that year, giving context to the rate shown."),
+            tags$p("A larger point means the success rate for that year is based on a higher volume of launches, making the statistic more robust."),
+            tags$strong("Key observations to make:"),
+            tags$ul(
+              tags$li("Observe the overall trajectory: Is the success rate generally improving, declining, or remaining stable?"),
+              tags$li("Pinpoint years or periods with significant changes in success rates."),
+              tags$li("Consider how launch volume (indicated by point size) might correlate with success rates.")
+            )
+          ),
+          # Column 2.2: Second Plot
+          div(
+            h4("Success Rate Trend Over Time", style = "margin-bottom: 1rem;"),
+            plotlyOutput(outputId = "success_rate_trend", height = "500px")
+          )
         )
-      )
-    )
-  ),
+      ) # End of main content div
+    ) # End of layout_sidebar
+  ), # End of nav_panel for Time Series Analysis
   
   # == Tab 2: Individual Rocket Parameters ==
   nav_panel(
@@ -221,41 +242,22 @@ ui <- page_navbar(
         title = "Choose Variables",
         selectInput("x_var_config", "Select X-axis Variable:",
                     choices = rocket_param_choices, 
-                    selected = rocket_param_choices[4]), # Default: Payload_to_LEO
+                    selected = rocket_param_choices[4]), 
         selectInput("y_var_config", "Select Y-axis Variable:",
                     choices = rocket_param_choices, 
-                    selected = rocket_param_choices[3])  # Default: Rocket_Height
+                    selected = rocket_param_choices[3])  
       ),
-      card(
+      card( 
         plotlyOutput("rocket_params_plot", height = "600px") 
       )
     )
   ),
   
-  # == Tab 3: Prediction Model ==
-  nav_panel(
-    title = "Prediction Model",
-    if (is.null(model)) {
-      card(
-        "The prediction model is currently unavailable. Please ensure the model file is present in the application directory."
-      )
-    } else {
-      card(
-        "Model is available and ready for predictions."
-      )
-    }
-  ),
+  # == Tab 3: Prediction Model (Placeholder) ==
+  nav_panel(title = "Prediction Model"),
   
-  # == Tab 4: About ==
-  nav_panel(
-    title = "About",
-    card(
-      "Rocket Launch Dashboard",
-      "This dashboard provides insights into rocket launch data, including success rates, trends, and individual rocket parameters.",
-      "Created by James Ga-as and Theo Benedict Pasia",
-      "University of Southeastern Philippines - Obrero Campus"
-    )
-  ),
+  # == Tab 4: About (Placeholder) ==
+  nav_panel(title = "About"),
   
   nav_spacer(),
   
@@ -271,36 +273,32 @@ server <- function(input, output, session) {
   
   # Reactive expression for data filtered by user inputs on "Time Series Analysis" tab
   filtered_data <- reactive({
-    req(input$year_slider) # Ensure year slider input is available
+    req(input$year_slider) 
     
-    current_data <- data # Start with the base data for this tab
+    current_data <- data 
     
-    # Apply year filter
     current_data <- current_data |> 
       dplyr::filter(
         Launch_Year >= input$year_slider[1] & 
           Launch_Year <= input$year_slider[2]
       )
     
-    # Apply rocket filter (if any selected)
     if (!is.null(input$select_rocket) && length(input$select_rocket) > 0) {
       current_data <- current_data |>
         dplyr::filter(Rocket_Name %in% input$select_rocket)
     }
     
-    # Apply organization filter (if any selected)
     if (!is.null(input$select_organization) && length(input$select_organization) > 0) {
       current_data <- current_data |>
         dplyr::filter(Rocket_Organisation %in% input$select_organization)
     }
     
-    # Apply status filter (if any selected)
     if (!is.null(input$select_status) && length(input$select_status) > 0) {
       current_data <- current_data |>
         dplyr::filter(Launch_Status %in% input$select_status)
     }
     
-    current_data # Return the fully filtered data
+    current_data 
   })
   
   # Reactive expression for launch status counts based on filtered_data
@@ -349,10 +347,10 @@ server <- function(input, output, session) {
     success_trend <- filtered_data() %>%
       mutate(is_success = case_when(Launch_Status == "Success" ~ 1, Launch_Status == "Partial Failure" ~ 0.5, TRUE ~ 0)) %>%
       group_by(Launch_Year) %>%
-      summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop")
+      summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop") 
     
     trend_plot <- ggplot(success_trend, aes(x = Launch_Year, y = success_rate)) +
-      geom_line(color = "#2196F3", linewidth = 1) +
+      geom_line(color = "#2196F3", linewidth = 1) + 
       geom_point(aes(size = total_launches, text = paste0("Year: ", Launch_Year, "<br>Success Rate: ", scales::percent(success_rate, accuracy = 0.1), "<br>Total Launches: ", total_launches)), color = "#2196F3", alpha = 0.4) +
       scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
       scale_size_continuous(range = c(2, 7)) +
@@ -362,23 +360,39 @@ server <- function(input, output, session) {
     ggplotly(trend_plot, tooltip = "text")
   })
   
-  # Plot: Scatter plot for individual rocket parameters
+  # Plot: Scatter plot for individual rocket parameters, using 'config_data'
   output$rocket_params_plot <- renderPlotly({
-    req(input$x_var_config, input$y_var_config)
+    req(input$x_var_config, input$y_var_config) 
     
-    plot_df <- config_data
+    if (!exists("config_data") || is.null(config_data) || nrow(config_data) == 0) {
+      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Rocket configuration data is not loaded or is empty.", x = 0.5)))
+    }
+    if (!(input$x_var_config %in% names(config_data)) || !(input$y_var_config %in% names(config_data))) {
+      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Selected column(s) not found in rocket configuration data.", x = 0.5)))
+    }
+    if (!is.numeric(config_data[[input$x_var_config]]) || !is.numeric(config_data[[input$y_var_config]])) {
+      return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Selected column(s) must be numeric for this plot.", x = 0.5)))
+    }
+    
+    plot_df <- config_data 
     
     p <- ggplot(plot_df, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
       geom_point(alpha = 0.7, color = "steelblue", size = 2.5) +
       labs(x = input$x_var_config, y = input$y_var_config) +
       theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
     
-    # Add tooltips with Rocket_Name
-    p <- p + aes(text = paste0(
-      "Rocket: ", Rocket_Name, "<br>", 
-      input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
-      input$y_var_config, ": ", .data[[input$y_var_config]]
-    ))
+    if ("Rocket_Name" %in% names(plot_df)) {
+      p <- p + aes(text = paste0(
+        "Rocket: ", .data[["Rocket_Name"]], "<br>", 
+        input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
+        input$y_var_config, ": ", .data[[input$y_var_config]]
+      ))
+    } else {
+      p <- p + aes(text = paste0(
+        input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
+        input$y_var_config, ": ", .data[[input$y_var_config]]
+      ))
+    }
     
     ggplotly(p, tooltip = "text") %>%
       layout(title = list(text = paste(input$y_var_config, "vs.", input$x_var_config), x = 0.5, xanchor = 'center'))
