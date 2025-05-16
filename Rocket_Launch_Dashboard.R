@@ -121,39 +121,39 @@ ui <- page_navbar(
     title = "Time Series Analysis",
     layout_sidebar(
       sidebar = sidebar(
-        width = 300,
+        width = 320,
         title = "Filter by...",
+        div(
+          style = "margin-bottom: 10px;",
+          helpText("Use the filters below to explore launch data by year, rocket, organization, and status.")
+        ),
         accordion(
           accordion_panel(
             title = "Year",
             icon = icon("calendar"),
             sliderInput("year_slider", "Filter by Year",
-                        min = min(data$Launch_Year, na.rm = TRUE), 
+                        min = min(data$Launch_Year, na.rm = TRUE),
                         max = max(data$Launch_Year, na.rm = TRUE),
                         value = c(min(data$Launch_Year, na.rm = TRUE), max(data$Launch_Year, na.rm = TRUE)),
-                        step = 1, tick = FALSE, sep = "")
+                        step = 1, tick = FALSE, sep = ""),
+            helpText("Select a range of years to filter launches.")
           ),
           accordion_panel(
             title = "Rocket",
             icon = icon("rocket"),
             selectizeInput("select_rocket", "Filter by Rocket:",
                            choices = unique(data$Rocket_Name), multiple = TRUE,
-                           options = list(placeholder = "Select rocket(s)..."))
+                           options = list(placeholder = "Select rocket(s)...")),
+            helpText("Choose one or more rockets.")
           ),
           accordion_panel(
             title = "Organization",
             icon = icon("building"),
             selectizeInput("select_organization", "Filter by Organization:",
                            choices = unique(data$Rocket_Organisation), multiple = TRUE,
-                           options = list(placeholder = "Select Organization(s)..."))
+                           options = list(placeholder = "Select Organization(s)...")),
+            helpText("Choose one or more organizations.")
           ),
-          accordion_panel(
-            title = "Launch Status",
-            icon = icon("chart-bar"),
-            selectizeInput("select_status", "Filter by Launch Status:",
-                           choices = unique(data$Launch_Status), multiple = TRUE,
-                           options = list(placeholder = "Select Status..."))
-          )
         )
       ),
       navset_card_tab(
@@ -219,11 +219,12 @@ ui <- page_navbar(
       sidebar = sidebar(
         width = 300,
         title = "Choose Variables",
+        helpText("Select variables to compare rocket parameters."),
         selectInput("x_var_config", "Select X-axis Variable:",
-                    choices = rocket_param_choices, 
+                    choices = rocket_param_choices,
                     selected = rocket_param_choices[4]), # Default: Payload_to_LEO
         selectInput("y_var_config", "Select Y-axis Variable:",
-                    choices = rocket_param_choices, 
+                    choices = rocket_param_choices,
                     selected = rocket_param_choices[3])  # Default: Rocket_Height
       ),
       card(
@@ -237,11 +238,34 @@ ui <- page_navbar(
     title = "Prediction Model",
     if (is.null(model)) {
       card(
-        "The prediction model is currently unavailable. Please ensure the model file is present in the application directory."
+        div(
+          style = "color: #b94a48; background: #f2dede; border: 1px solid #ebccd1; padding: 15px; border-radius: 4px;",
+          icon("exclamation-triangle"),
+          strong("Prediction model unavailable:"),
+          " The model file could not be loaded. Please upload or place 'rocket_launch_model_boosted_tree.rds' in the application directory to enable predictions."
+        )
       )
     } else {
       card(
-        "Model is available and ready for predictions."
+        div(
+          style = "margin-bottom: 15px;",
+          h4("Enter Rocket Parameters to Predict Launch Success Probability")
+        ),
+        numericInput("Fairing_Height", "Fairing Height (m):", value = 13, min = 1),
+        numericInput("Fairing_Diameter", "Fairing Diameter (m):", value = 5, min = 1),
+        numericInput("Rocket_Height", "Rocket Height (m):", value = 50, min = 1),
+        numericInput("Payload_to_LEO", "Payload to LEO (kg):", value = 15000, min = 1),
+        numericInput("Payload_to_GTO", "Payload to GTO (kg):", value = 6000, min = 0),
+        numericInput("Stages", "Stages:", value = 2, min = 1, max = 5),
+        numericInput("Strap_Ons", "Strap-Ons:", value = 0, min = 0, max = 8),
+        numericInput("Liftoff_Thrust", "Liftoff Thrust (kN):", value = 7600, min = 1),
+        numericInput("Payloads", "Payloads:", value = 1, min = 1),
+        numericInput("Mass", "Mass (kg):", value = 549054, min = 1),
+        actionButton("predict_btn", "Predict Launch Success Probability", icon = icon("rocket")),
+        div(style = "margin-top: 20px;",
+            h5("Predicted Probability of Launch Success:"),
+            textOutput("launch_success_prob")
+        )
       )
     }
   ),
@@ -263,11 +287,38 @@ ui <- page_navbar(
     input_dark_mode(id = "mode")
   ),
   
-  theme = bs_theme(preset = "minty")
+  theme = bs_theme(preset = "minty", base_font = font_google("Roboto"))
 )
 
 # --- Server Logic ---
 server <- function(input, output, session) {
+
+  # --- Prediction Model Output ---
+  observeEvent(input$predict_btn, {
+    req(model)
+    obs <- tibble::tibble(
+      Fairing_Height = input$Fairing_Height,
+      Fairing_Diameter = input$Fairing_Diameter,
+      Rocket_Height = input$Rocket_Height,
+      Payload_to_LEO = input$Payload_to_LEO,
+      Payload_to_GTO = input$Payload_to_GTO,
+      Stages = input$Stages,
+      Strap_Ons = input$Strap_Ons,
+      Liftoff_Thrust = input$Liftoff_Thrust,
+      Payloads = input$Payloads,
+      Mass = input$Mass
+    )
+    pred <- predict(model, obs, type = "prob")
+    prob_success <- if ("Success" %in% colnames(pred)) pred$Success else NA
+    output$launch_success_prob <- renderText({
+      if (is.na(prob_success)) {
+        "Prediction unavailable"
+      } else {
+        paste0(round(prob_success * 100, 2), "%")
+      }
+    })
+  })
+
   
   # Reactive expression for data filtered by user inputs on "Time Series Analysis" tab
   filtered_data <- reactive({
@@ -335,6 +386,10 @@ server <- function(input, output, session) {
       summarize(count = n(), .groups = "drop") %>%
       mutate(Launch_Status = factor(Launch_Status, levels = c("Success", "Partial Failure", "Failure", "Prelaunch Failure")))
     
+    validate(
+      need(nrow(status_counts_by_year) > 0, "No data available for the selected filters.")
+    )
+    
     status_plot <- ggplot(status_counts_by_year, aes(x = factor(Launch_Year), y = count, fill = Launch_Status)) +
       geom_bar(stat = "identity", position = "stack") +
       scale_fill_manual(values = c("Success"="#4CAF50", "Partial Failure"="#FFC107", "Failure"="#F44336", "Prelaunch Failure"="#9E9E9E")) +
@@ -350,6 +405,10 @@ server <- function(input, output, session) {
       mutate(is_success = case_when(Launch_Status == "Success" ~ 1, Launch_Status == "Partial Failure" ~ 0.5, TRUE ~ 0)) %>%
       group_by(Launch_Year) %>%
       summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop")
+    
+    validate(
+      need(nrow(success_trend) > 0, "No data available for the selected filters.")
+    )
     
     trend_plot <- ggplot(success_trend, aes(x = Launch_Year, y = success_rate)) +
       geom_line(color = "#2196F3", linewidth = 1) +
@@ -368,6 +427,10 @@ server <- function(input, output, session) {
     
     plot_df <- config_data
     
+    validate(
+      need(nrow(plot_df) > 0, "No data available for plotting rocket parameters.")
+    )
+    
     p <- ggplot(plot_df, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
       geom_point(alpha = 0.7, color = "steelblue", size = 2.5) +
       labs(x = input$x_var_config, y = input$y_var_config) +
@@ -375,7 +438,7 @@ server <- function(input, output, session) {
     
     # Add tooltips with Rocket_Name
     p <- p + aes(text = paste0(
-      "Rocket: ", Rocket_Name, "<br>", 
+      "Rocket: ", Rocket_Name, "<br>",
       input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
       input$y_var_config, ": ", .data[[input$y_var_config]]
     ))

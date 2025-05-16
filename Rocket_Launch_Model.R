@@ -110,33 +110,6 @@ conf_matrix <- pred_results |>
 print("Confusion Matrix:")
 print(conf_matrix)
 
-# Create interactive confusion matrix plot
-conf_matrix_data <- conf_matrix$table
-conf_matrix_df <- as.data.frame(conf_matrix_data)
-names(conf_matrix_df) <- c("Predicted", "Actual", "Count")
-
-# Create interactive heatmap
-conf_matrix_plot <- plot_ly(
-  data = conf_matrix_df,
-  x = ~Predicted,
-  y = ~Actual,
-  z = ~Count,
-  type = "heatmap",
-  colors = colorRamp(c("#FFFFFF", "#2196F3")),
-  text = ~paste("Predicted:", Predicted, "\nActual:", Actual, "\nCount:", Count),
-  hoverinfo = "text"
-) %>%
-  layout(
-    title = "Confusion Matrix",
-    xaxis = list(title = "Predicted Class"),
-    yaxis = list(title = "Actual Class"),
-    showlegend = FALSE
-  )
-
-# Display the interactive plot
-print("Interactive Confusion Matrix Visualization:")
-print(conf_matrix_plot)
-
 # Get class-specific metrics
 class_metrics <- pred_results |>
   metrics(truth = `Launch_Status`, estimate = .pred_class) |>
