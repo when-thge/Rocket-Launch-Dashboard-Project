@@ -11,6 +11,7 @@ library(shinythemes)
 library(bslib)
 library(plotly)
 library(here)
+library(rsconnect)
 
 # --- Data Loading and Initial Preparation ---
 raw_data <- read_csv(here::here("./Aggregated_Launch_Mission_Configs.csv")) |>
@@ -144,65 +145,11 @@ ui <- page_navbar(
           col_widths = c(7, 5), 
           # Column 1.1: Value Boxes and First Plot
           div(
-            h4("Launch Counts by Year & Status Overview", style = "margin-bottom: 1rem;"),
-            layout_columns(
-              value_box(
-                title = NULL, 
-                value = tags$div(
-                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
-                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Success"), # Title very small
-                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("success_vbox")) # Value smaller
-                ),
-                theme_color = "success",
-                height = "80px"
-              ),
-              value_box(
-                title = NULL,
-                value = tags$div(
-                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
-                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Partial Failure"), 
-                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("partial_failure_vbox")) 
-                ),
-                theme_color = "warning",
-                height = "80px"
-              ),
-              value_box(
-                title = NULL,
-                value = tags$div(
-                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
-                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Failure"), 
-                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("failure_vbox")) 
-                ),
-                theme_color = "danger",
-                height = "80px"
-              ),
-              value_box(
-                title = NULL,
-                value = tags$div(
-                  style = "display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; text-align: center;",
-                  tags$span(style = "font-size: 0.6em; line-height: 1.1;", "Prelaunch Failure"), 
-                  tags$span(style = "font-size: 1.0rem; font-weight: bold; line-height: 1.1;", textOutput("prelaunch_failure_vbox")) 
-                ),
-                theme_color = "secondary",
-                height = "80px"
-              ),
-              col_widths = c(3, 3, 3, 3)
-            ),
-            plotlyOutput(outputId = "Time_series_line", height = "600px")
+            # (Launch status value boxes and plot removed)
           ),
           # Column 1.2: Text for First Plot
           div(
-            h4("Analysis: Launch Counts & Status", style = "margin-bottom: 1rem;"),
-            tags$p("The value boxes above provide a quick summary of total launch outcomes based on the current filters. Below them, the stacked bar chart visualizes the number of rocket launches each year, broken down by their outcome: Success, Partial Failure, Failure, and Prelaunch Failure."),
-            tags$p("This combination offers both an aggregate view and a detailed yearly trend of launch activity and reliability."),
-            tags$p("Use the sidebar filters to customize the data shown. You can focus on specific year ranges, rocket types, launching organizations, or particular launch statuses."),
-            tags$strong("Key observations to make:"),
-            tags$ul(
-              tags$li("Correlate the summary counts with the yearly distribution in the chart."),
-              tags$li("Identify periods of increased or decreased launch frequency."),
-              tags$li("Track changes in the proportion of successful launches versus failures over the years."),
-              tags$li("Analyze the performance of specific rockets or organizations if filtered.")
-            )
+            # (Launch status analysis text removed)
           )
         ),
         
@@ -301,34 +248,7 @@ server <- function(input, output, session) {
     current_data 
   })
   
-  # Reactive expression for launch status counts based on filtered_data
-  status_counts <- reactive({
-    filtered_data() %>%
-      group_by(Launch_Status) %>%
-      summarize(count = n(), .groups = "drop")
-  })
-  
-  # Outputs for value boxes displaying launch status counts
-  output$success_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Success") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
-  })
-  output$partial_failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Partial Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
-  })
-  output$failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
-  })
-  output$prelaunch_failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Prelaunch Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
-  })
-  
-  # Plot: Launch counts by year, stacked by launch status
-  output$Time_series_line <- renderPlotly({
-    status_counts_by_year <- filtered_data() %>%
+  # (Launch status backend logic and plot removed)
       group_by(Launch_Year, Launch_Status) %>%
       summarize(count = n(), .groups = "drop") %>%
       mutate(Launch_Status = factor(Launch_Status, levels = c("Success", "Partial Failure", "Failure", "Prelaunch Failure")))

@@ -78,18 +78,18 @@ rocket_param_choices <- c(
 )
 
 # --- Prediction Function ---
-predict_launch <- function(Fairing_Height,   
-                         Fairing_Diameter, 
-                         Rocket_Height,    
-                         Payload_to_LEO,   
-                         Payload_to_GTO,   
+predict_launch <- function(Fairing_Height,
+                         Fairing_Diameter,
+                         Rocket_Height,
+                         Payload_to_LEO,
+                         Payload_to_GTO,
                          Stages,
-                         Strap_Ons,        
-                         Liftoff_Thrust,   
+                         Strap_Ons,
+                         Liftoff_Thrust,
                          Payloads,
                          Mass) {
   if (is.null(model)) {
-    return("Model not available")
+    return(list(class = "Model not available", prob = NA))
   }
   
   observation <- tibble(
@@ -99,15 +99,27 @@ predict_launch <- function(Fairing_Height,
     Payload_to_LEO = Payload_to_LEO,
     Payload_to_GTO = Payload_to_GTO,
     Stages = Stages,
-    Strap_Ons = Strap_Ons, 
+    Strap_Ons = Strap_Ons,
     Liftoff_Thrust = Liftoff_Thrust,
     Payloads = Payloads,
     Mass = Mass
   )
   
-  prediction <- predict(model, observation)
+  pred_class <- tryCatch({
+    predict(model, observation)
+  }, error = function(e) {
+    return(NULL)
+  })
+  pred_prob <- tryCatch({
+    predict(model, observation, type = "prob")
+  }, error = function(e) {
+    return(NULL)
+  })
   
-  return(prediction$.pred_class)
+  class_val <- if (!is.null(pred_class) && ".pred_class" %in% colnames(pred_class)) as.character(pred_class$.pred_class) else "Prediction error"
+  prob_val <- if (!is.null(pred_prob) && "Success" %in% colnames(pred_prob)) pred_prob$Success else NA
+  
+  return(list(class = class_val, prob = prob_val))
 }
 
 # --- UI Definition ---
@@ -232,17 +244,37 @@ ui <- page_navbar(
   
   # == Tab 3: Prediction Model ==
   nav_panel(
-    title = "Prediction Model",
-    if (is.null(model)) {
-      card(
-        "The prediction model is currently unavailable. Please ensure the model file is present in the application directory."
-      )
-    } else {
-      card(
-        "Model is available and ready for predictions."
-      )
-    }
-  ),
+      title = "Prediction Model",
+      if (is.null(model)) {
+        card(
+          "The prediction model is currently unavailable. Please ensure the model file is present in the application directory."
+        )
+      } else {
+        layout_sidebar(
+          sidebar = sidebar(
+            width = 350,
+            title = "Enter Rocket Parameters",
+            sliderInput("Fairing_Height", "Fairing Height", min = 0, max = 100, value = 50),
+            sliderInput("Fairing_Diameter", "Fairing Diameter", min = 0, max = 20, value = 10),
+            sliderInput("Rocket_Height", "Rocket Height", min = 0, max = 150, value = 75),
+            sliderInput("Payload_to_LEO", "Payload to LEO", min = 0, max = 100000, value = 50000, step = 100),
+            sliderInput("Payload_to_GTO", "Payload to GTO", min = 0, max = 50000, value = 25000, step = 100),
+            sliderInput("Stages", "Stages", min = 1, max = 5, value = 2, step = 1),
+            sliderInput("Strap_Ons", "Strap Ons", min = 0, max = 10, value = 0, step = 1),
+            sliderInput("Liftoff_Thrust", "Liftoff Thrust", min = 0, max = 10000000, value = 5000000, step = 10000),
+            sliderInput("Payloads", "Payloads", min = 0, max = 20, value = 1, step = 1),
+            sliderInput("Mass", "Mass", min = 0, max = 500000, value = 250000, step = 1000),
+            actionButton("predict_btn", "Predict Launch Status", class = "btn-primary")
+          ),
+          card(
+            h4("Prediction Result"),
+            verbatimTextOutput("prediction_result"),
+            h4("Probability of Success"),
+            verbatimTextOutput("prediction_prob")
+          )
+        )
+      }
+    ),
   
   # == Tab 4: About ==
   nav_panel(
@@ -261,22 +293,74 @@ ui <- page_navbar(
     input_dark_mode(id = "mode")
   ),
   
-  theme = bs_theme(preset = "minty")
+  # theme = bs_theme(preset = "minty")
 )
 
 # --- Server Logic ---
 server <- function(input, output, session) {
   
+  # --- Prediction Model Tab Logic ---
+  observeEvent(input$predict_btn, {
+    req(
+      !is.null(input$Fairing_Height), !is.na(input$Fairing_Height),
+      !is.null(input$Fairing_Diameter), !is.na(input$Fairing_Diameter),
+      !is.null(input$Rocket_Height), !is.na(input$Rocket_Height),
+      !is.null(input$Payload_to_LEO), !is.na(input$Payload_to_LEO),
+      !is.null(input$Payload_to_GTO), !is.na(input$Payload_to_GTO),
+      !is.null(input$Stages), !is.na(input$Stages),
+      !is.null(input$Strap_Ons), !is.na(input$Strap_Ons),
+      !is.null(input$Liftoff_Thrust), !is.na(input$Liftoff_Thrust),
+      !is.null(input$Payloads), !is.na(input$Payloads),
+      !is.null(input$Mass), !is.na(input$Mass)
+    )
+    observation <- tibble::tibble(
+      Fairing_Height = input$Fairing_Height,
+      Fairing_Diameter = input$Fairing_Diameter,
+      Rocket_Height = input$Rocket_Height,
+      Payload_to_LEO = input$Payload_to_LEO,
+      Payload_to_GTO = input$Payload_to_GTO,
+      Stages = input$Stages,
+      Strap_Ons = input$Strap_Ons,
+      Liftoff_Thrust = input$Liftoff_Thrust,
+      Payloads = input$Payloads,
+      Mass = input$Mass
+    )
+    pred_prob <- tryCatch({
+      predict(model, observation, type = "prob")
+    }, error = function(e) {
+      NULL
+    })
+    pred_class <- tryCatch({
+      predict(model, observation)
+    }, error = function(e) {
+      NULL
+    })
+    output$prediction_result <- renderText({
+      if (!is.null(pred_class) && ".pred_class" %in% colnames(pred_class)) {
+        as.character(pred_class$.pred_class)
+      } else {
+        "Prediction error"
+      }
+    })
+    output$prediction_prob <- renderText({
+      if (is.null(pred_prob)) {
+        "Probability not available"
+      } else {
+        paste0("Prob columns: ", paste(colnames(pred_prob), collapse = ", "),
+               " | Values: ", paste(round(as.numeric(pred_prob[1,]), 4), collapse = ", "))
+      }
+    })
+  })
+  
   # Reactive expression for data filtered by user inputs on "Time Series Analysis" tab
   filtered_data <- reactive({
-    req(input$year_slider) # Ensure year slider input is available
-    
-    current_data <- data # Start with the base data for this tab
+    req(input$year_slider)
+    current_data <- data
     
     # Apply year filter
-    current_data <- current_data |> 
+    current_data <- current_data |>
       dplyr::filter(
-        Launch_Year >= input$year_slider[1] & 
+        Launch_Year >= input$year_slider[1] &
           Launch_Year <= input$year_slider[2]
       )
     
@@ -298,37 +382,49 @@ server <- function(input, output, session) {
         dplyr::filter(Launch_Status %in% input$select_status)
     }
     
-    current_data # Return the fully filtered data
+    current_data
   })
   
   # Reactive expression for launch status counts based on filtered_data
   status_counts <- reactive({
-    filtered_data() %>%
+    df <- filtered_data()
+    if (nrow(df) == 0) {
+      return(tibble(Launch_Status = character(0), count = integer(0)))
+    }
+    df %>%
       group_by(Launch_Status) %>%
       summarize(count = n(), .groups = "drop")
   })
   
   # Outputs for value boxes displaying launch status counts
   output$success_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Success") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
+    counts <- status_counts()
+    count <- counts %>% filter(Launch_Status == "Success") %>% pull(count)
+    if(length(count) == 0 || is.na(count)) "0" else as.character(count)
   })
   output$partial_failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Partial Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
+    counts <- status_counts()
+    count <- counts %>% filter(Launch_Status == "Partial Failure") %>% pull(count)
+    if(length(count) == 0 || is.na(count)) "0" else as.character(count)
   })
   output$failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
+    counts <- status_counts()
+    count <- counts %>% filter(Launch_Status == "Failure") %>% pull(count)
+    if(length(count) == 0 || is.na(count)) "0" else as.character(count)
   })
   output$prelaunch_failure_vbox <- renderText({
-    count <- status_counts() %>% filter(Launch_Status == "Prelaunch Failure") %>% pull(count)
-    if(length(count) == 0) "0" else as.character(count)
+    counts <- status_counts()
+    count <- counts %>% filter(Launch_Status == "Prelaunch Failure") %>% pull(count)
+    if(length(count) == 0 || is.na(count)) "0" else as.character(count)
   })
   
   # Plot: Launch counts by year, stacked by launch status
   output$Time_series_line <- renderPlotly({
-    status_counts_by_year <- filtered_data() %>%
+    df <- filtered_data()
+    validate(
+      need(nrow(df) > 0, "No data available for the selected filters.")
+    )
+    status_counts_by_year <- df %>%
       group_by(Launch_Year, Launch_Status) %>%
       summarize(count = n(), .groups = "drop") %>%
       mutate(Launch_Status = factor(Launch_Status, levels = c("Success", "Partial Failure", "Failure", "Prelaunch Failure")))
@@ -344,7 +440,11 @@ server <- function(input, output, session) {
   
   # Plot: Success rate trend over time
   output$success_rate_trend <- renderPlotly({
-    success_trend <- filtered_data() %>%
+    df <- filtered_data()
+    validate(
+      need(nrow(df) > 0, "No data available for the selected filters.")
+    )
+    success_trend <- df %>%
       mutate(is_success = case_when(Launch_Status == "Success" ~ 1, Launch_Status == "Partial Failure" ~ 0.5, TRUE ~ 0)) %>%
       group_by(Launch_Year) %>%
       summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop")
@@ -363,9 +463,10 @@ server <- function(input, output, session) {
   # Plot: Scatter plot for individual rocket parameters
   output$rocket_params_plot <- renderPlotly({
     req(input$x_var_config, input$y_var_config)
-    
     plot_df <- config_data
-    
+    validate(
+      need(nrow(plot_df) > 0, "No rocket parameter data available.")
+    )
     p <- ggplot(plot_df, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
       geom_point(alpha = 0.7, color = "steelblue", size = 2.5) +
       labs(x = input$x_var_config, y = input$y_var_config) +
@@ -373,7 +474,7 @@ server <- function(input, output, session) {
     
     # Add tooltips with Rocket_Name
     p <- p + aes(text = paste0(
-      "Rocket: ", Rocket_Name, "<br>", 
+      "Rocket: ", Rocket_Name, "<br>",
       input$x_var_config, ": ", .data[[input$x_var_config]], "<br>",
       input$y_var_config, ": ", .data[[input$y_var_config]]
     ))
