@@ -52,8 +52,8 @@ config_data <- raw_data |>
     Liftoff_Thrust,
     Payloads,
     Mass
-  ) |> 
-  drop_na(Rocket_Name) 
+  ) |>
+  drop_na(Rocket_Name)
 
 # Ensure your RDS model path is correct
 model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
@@ -108,14 +108,14 @@ ggplot_theme_transparent <- theme(
   plot.background = element_rect(fill = "transparent", colour = NA),
   panel.background = element_rect(fill = "transparent", colour = NA),
   legend.background = element_rect(fill = "transparent", colour = NA),
-  panel.grid.major = element_line(linewidth = 0.25), 
-  panel.grid.minor = element_line(linewidth = 0.1)   
+  panel.grid.major = element_line(linewidth = 0.25),
+  panel.grid.minor = element_line(linewidth = 0.1)
 )
 
 dark_mode_text_color <- "#adb5bd"
 light_mode_text_color <- "#212529"
-dark_mode_secondary_text_color <- "#6c757d" 
-light_mode_secondary_text_color <- "#6c757d" 
+dark_mode_secondary_text_color <- "#6c757d"
+light_mode_secondary_text_color <- "#6c757d"
 
 dark_mode_grid_color <- "rgba(173, 181, 189, 0.2)"
 light_mode_grid_color <- "rgba(33, 37, 41, 0.1)"
@@ -161,7 +161,7 @@ ui <- page_navbar(
       div(
         layout_columns(
           col_widths = c(8, 4),
-          div( 
+          div(
             h4("Launch Counts by Year & Status Overview", style = "margin-bottom: 1rem;"),
             layout_columns(
               col_widths = c(3, 3, 3, 3),
@@ -194,16 +194,16 @@ ui <- page_navbar(
                 theme = "secondary"
               )
             ),
-            plotlyOutput(outputId = "Time_series_line", height = "550px")
+            plotlyOutput(outputId = "Time_series_line", height = "620px") # Fixed height plot
           ),
-          div( 
-            style = "text-align: center;", 
+          div(
+            style = "text-align: center;",
             h4("Understanding Launch Activity & Outcomes", style = "margin-bottom: 1rem;"),
             tags$p("This section provides a dual view of rocket launch history: aggregate statistics and yearly trends. The value boxes above offer a quick snapshot of total launch outcomes (Success, Partial Failure, Failure, Prelaunch Failure) based on your current filter selections (year range, specific rockets, or organizations)."),
             tags$p("Below them, the stacked bar chart offers a granular, year-by-year visualization. Each bar represents a year, and its segments show the count of launches by their outcome. This allows for an intuitive comparison of launch volume and success profiles over time."),
             tags$strong("What to look for:"),
             tags$ul(
-              style = "display: inline-block; text-align: left; margin-top: 0.5rem;", 
+              style = "display: inline-block; text-align: left; margin-top: 0.5rem;",
               tags$li(tags$strong("Overall Trends:"), " Are there distinct eras of increased or decreased launch activity? Do failure rates seem to concentrate in certain periods?"),
               tags$li(tags$strong("Proportional Changes:"), " Observe how the proportion of successful launches to failures changes year-over-year. A tall bar with a large green segment is ideal!"),
               tags$li(tags$strong("Impact of Filters:"), " When you filter by specific rockets or organizations, how does their performance profile compare to the overall trends? Does a particular rocket show a learning curve with initially higher failures followed by improvements?"),
@@ -218,14 +218,14 @@ ui <- page_navbar(
         
         layout_columns(
           col_widths = c(4, 8),
-          div( 
-            style = "text-align: center;", 
+          div(
+            style = "text-align: center;",
             h4("Analyzing Launch Reliability Over Time", style = "margin-bottom: 1rem;"),
             tags$p("This line graph specifically tracks the evolution of launch success rates. We define success on a weighted scale: a full 'Success' contributes 1.0, a 'Partial Failure' contributes 0.5, and other outcomes contribute 0.0 to the yearly average. This provides a nuanced view beyond a simple binary success/failure metric."),
             tags$p("The size of each point on the line corresponds to the total number of launches in that year. Larger points indicate that the success rate for that year is based on a more substantial sample of launches, making it a more statistically robust data point."),
             tags$strong("Key questions this chart helps answer:"),
             tags$ul(
-              style = "display: inline-block; text-align: left; margin-top: 0.5rem;", 
+              style = "display: inline-block; text-align: left; margin-top: 0.5rem;",
               tags$li(tags$strong("Reliability Trajectory:"), " Is the overall trend in launch success rates upwards (indicating improving reliability), downwards, or volatile?"),
               tags$li(tags$strong("Inflection Points:"), " Are there specific years or periods where the success rate changed significantly? What might have driven these changes (e.g., introduction of new technologies, changes in operational procedures, specific high-profile failures impacting subsequent designs)?"),
               tags$li(tags$strong("Volume vs. Rate:"), " How does the success rate correlate with launch volume (point size)? Are periods of high launch activity associated with higher or lower success rates? A high success rate on many launches is a strong indicator of maturity."),
@@ -234,9 +234,9 @@ ui <- page_navbar(
             ),
             tags$p("Combining insights from this chart with the launch count chart above can provide a comprehensive understanding of both the quantity and quality of launch activities.")
           ),
-          div( 
+          div(
             h4("Success Rate Trend Over Time", style = "margin-bottom: 1rem;"),
-            plotlyOutput(outputId = "success_rate_trend", height = "800px")
+            plotlyOutput(outputId = "success_rate_trend", height = "800px") # Fixed height plot
           )
         )
       )
@@ -249,9 +249,9 @@ ui <- page_navbar(
     layout_sidebar(
       sidebar = sidebar(
         width = 300,
-        title = "Plot Controls", 
+        title = "Plot Controls",
         accordion(
-          open = "Plot Variables", 
+          open = "Plot Variables",
           accordion_panel(
             title = "Plot Variables",
             icon = bsicons::bs_icon("sliders"),
@@ -264,30 +264,94 @@ ui <- page_navbar(
           ),
           accordion_panel(
             title = "Filter by Rocket",
-            icon = bsicons::bs_icon("rocket-takeoff"), 
-            selectizeInput("select_rocket_param_tab", "Filter by Rocket:", 
+            icon = bsicons::bs_icon("rocket-takeoff"),
+            selectizeInput("select_rocket_param_tab", "Filter by Rocket:",
                            choices = unique(data$Rocket_Name), multiple = TRUE,
                            options = list(placeholder = "Select rocket(s)..."))
           ),
           accordion_panel(
             title = "Filter by Organization",
-            icon = bsicons::bs_icon("buildings"), 
-            selectizeInput("select_organization_param_tab", "Filter by Organization:", 
+            icon = bsicons::bs_icon("buildings"),
+            selectizeInput("select_organization_param_tab", "Filter by Organization:",
                            choices = unique(data$Rocket_Organisation), multiple = TRUE,
                            options = list(placeholder = "Select Organization(s)..."))
           )
         )
       ),
       card(
-        plotlyOutput("rocket_params_plot", height = "550px")
+        card_body_fill(
+          plotlyOutput("rocket_params_plot", height = "calc(100vh - 200px)")
+        )
       )
     )
   ),
   
+  # --- PREDICTION MODEL TAB ---
   nav_panel(
     title = "Prediction Model",
-    icon = bsicons::bs_icon("cpu-fill")
+    icon = bsicons::bs_icon("cpu-fill"),
+    layout_columns(
+      fill = TRUE,
+      fillable = TRUE,
+      col_widths = c(4, 4, 4),
+      gap = "1rem",
+      
+      # --- Content for the FIRST main column (col_width = 4) ---
+      list(
+        h5("Rocket Parameters", style = "margin-bottom: 0.5rem; text-align: center;"),
+        layout_columns(
+          fill = TRUE,
+          fillable = TRUE,
+          col_widths = c(6, 6),
+          row_heights = rep("1fr", 5),
+          gap = "0.5rem",
+          
+          card(card_header("Fairing Height"), card_body_fill("Content for card 1, col 1, row 1")),
+          card(card_header("Fairing Diameter"), card_body_fill("Content for card 1, col 2, row 1")),
+          card(card_header("Rocket Height"), card_body_fill("Content for card 1, col 1, row 2")),
+          card(card_header("Payload to LEO"), card_body_fill("Content for card 1, col 2, row 2")),
+          card(card_header("Payload to GTO"), card_body_fill("Content for card 1, col 1, row 3")),
+          card(card_header("Stages"), card_body_fill("Content for card 1, col 2, row 3")),
+          card(card_header("Strap-Ons"), card_body_fill("Content for card 1, col 1, row 4")),
+          card(card_header("Liftoff Thrust"), card_body_fill("Content for card 1, col 2, row 4")),
+          card(card_header("Payloads"), card_body_fill("Content for card 1, col 1, row 5")),
+          card(card_header("Mass"), card_body_fill("Content for card 1, col 2, row 5"))
+        )
+      ),
+      
+      # --- Content for the SECOND main column (col_width = 4) ---
+      list(
+        h5("Launch Status and Price Predictions", style = "margin-bottom: 0.5rem; text-align: center;"),
+        layout_columns(
+          fill = TRUE,
+          fillable = TRUE,
+          col_widths = 12,
+          row_heights = c("1fr", "1fr"),
+          gap = "0.5rem",
+          
+          card(card_header("Card 2.1"), card_body_fill("Content for card 2, row 1")),
+          card(card_header("Card 2.2"), card_body_fill("Content for card 2, row 2"))
+        )
+      ),
+      
+      # --- Content for the THIRD main column (col_width = 4) ---
+      list(
+        h5("Column 3: 1x2 Cards", style = "margin-bottom: 0.5rem; text-align: center;"),
+        layout_columns(
+          fill = TRUE,
+          fillable = TRUE,
+          col_widths = 12,
+          row_heights = c("1fr", "1fr"),
+          gap = "0.5rem",
+          
+          card(card_header("Card 3.1"), card_body_fill("Content for card 3, row 1")),
+          card(card_header("Card 3.2"), card_body_fill("Content for card 3, row 2"))
+        )
+      )
+    )
   ),
+  # --- END PREDICTION MODEL TAB ---
+  
   nav_panel(
     title = "About",
     icon = bsicons::bs_icon("info-circle")
@@ -373,24 +437,26 @@ server <- function(input, output, session) {
   
   output$Time_series_line <- renderPlotly({
     cols <- plot_colors()
-    req(nrow(filtered_data()) > 0)
     status_counts_by_year_data <- filtered_data() %>%
       group_by(Launch_Year, Launch_Status) %>%
       summarize(count = n(), .groups = "drop")
+    
+    if(nrow(status_counts_by_year_data) == 0) {
+      return(plotly_empty(type="bar") %>% layout(title = list(text = "No data to display for current filters.", font=list(color=cols$fg)), paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)"))
+    }
+    
     expected_levels <- c("Success", "Partial Failure", "Failure", "Prelaunch Failure")
     status_counts_by_year <- status_counts_by_year_data %>%
       mutate(Launch_Status = factor(Launch_Status, levels = expected_levels))
     custom_bar_fill_colors <- c("Success" = "#77B300", "Partial Failure" = "#ff8800", "Failure" = "#CC0000", "Prelaunch Failure" = "#3d3e3d")
-    if(nrow(status_counts_by_year) == 0) {
-      return(plotly_empty(type="bar") %>% layout(title = list(text = "No data to display for current filters.", font=list(color=cols$fg))))
-    }
+    
     min_plot_year <- min(status_counts_by_year$Launch_Year, na.rm = TRUE)
     xaxis_tick0 <- floor(min_plot_year / 5) * 5
     p <- ggplot(status_counts_by_year, aes(x = Launch_Year, y = count, fill = Launch_Status)) +
       geom_bar(stat = "identity", position = "stack", width = 0.9) +
       scale_fill_manual(values = custom_bar_fill_colors, name = "Launch Status", drop = FALSE) +
       labs(x="Year", y="Number of Launches") +
-      theme_minimal() + ggplot_theme_transparent + theme() 
+      theme_minimal() + ggplot_theme_transparent + theme()
     ggplotly(p, tooltip = c("x", "y", "fill")) %>%
       layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)", font = list(color = cols$fg),
              xaxis = list(showgrid = TRUE, dtick = 5, tick0 = xaxis_tick0, gridcolor = cols$grid, linecolor = cols$grid, zerolinecolor = cols$grid, titlefont = list(color = cols$secondary_fg), tickfont = list(color = cols$secondary_fg)),
@@ -400,15 +466,16 @@ server <- function(input, output, session) {
   
   output$success_rate_trend <- renderPlotly({
     cols <- plot_colors()
-    req(nrow(filtered_data()) > 0)
-    success_trend <- filtered_data() %>%
+    success_trend_data <- filtered_data() %>%
       mutate(is_success = case_when(Launch_Status == "Success" ~ 1, Launch_Status == "Partial Failure" ~ 0.5, TRUE ~ 0)) %>%
       group_by(Launch_Year) %>%
       summarize(success_rate = mean(is_success, na.rm = TRUE), total_launches = n(), .groups = "drop")
-    if(nrow(success_trend) == 0) {
-      return(plotly_empty(type="scatter", mode="lines") %>% layout(title = list(text = "No data for success rate trend.", font=list(color=cols$fg))))
+    
+    if(nrow(success_trend_data) == 0) {
+      return(plotly_empty(type="scatter", mode="lines") %>% layout(title = list(text = "No data for success rate trend.", font=list(color=cols$fg)), paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)"))
     }
-    p <- ggplot(success_trend, aes(x = Launch_Year, y = success_rate)) +
+    
+    p <- ggplot(success_trend_data, aes(x = Launch_Year, y = success_rate)) +
       geom_line(aes(group=1), color = cols$primary, linewidth = 1) +
       geom_point(aes(size = total_launches, text = paste0("Year: ", Launch_Year, "<br>Success Rate: ", scales::percent(success_rate, accuracy = 0.1), "<br>Total Launches: ", total_launches)), color = cols$primary, alpha = 0.6) +
       scale_y_continuous(labels = scales::percent_format(accuracy = 1)) +
@@ -419,7 +486,7 @@ server <- function(input, output, session) {
       layout(paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)", font = list(color = cols$fg),
              xaxis = list(gridcolor = cols$grid, linecolor = cols$grid, zerolinecolor = cols$grid, titlefont = list(color = cols$secondary_fg), tickfont = list(color = cols$secondary_fg)),
              yaxis = list(gridcolor = cols$grid, linecolor = cols$grid, zerolinecolor = cols$grid, titlefont = list(color = cols$secondary_fg), tickfont = list(color = cols$secondary_fg)),
-             legend = list(font = list(color = cols$fg), bgcolor = "rgba(0,0,0,0.1)"))
+             legend = list(orientation = "h", yanchor = "bottom", y = 1.02, xanchor = "right", x = 1, font = list(color = cols$fg), bgcolor = "rgba(0,0,0,0.1)"))
   })
   
   output$rocket_params_plot <- renderPlotly({
@@ -461,18 +528,15 @@ server <- function(input, output, session) {
       return(plotly_empty(type = "scatter", mode = "markers") %>% layout(title = list(text = "Selected column(s) must be numeric for this plot.", x = 0.5, font = list(color = cols$fg)), paper_bgcolor = "rgba(0,0,0,0)", plot_bgcolor = "rgba(0,0,0,0)"))
     }
     
-    # Base plot with x and y aesthetics
     p <- ggplot(plot_df_filtered, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
-      # Apply fixed visual properties to geom_point
-      geom_point(color = cols$primary, alpha = 0.6, size = 4) + 
+      geom_point(color = cols$primary, alpha = 0.6, size = 4) +
       labs(x = str_replace_all(input$x_var_config, "_", " "),
            y = str_replace_all(input$y_var_config, "_", " ")) +
       theme_minimal() +
       ggplot_theme_transparent +
       theme(plot.title = element_text(hjust = 0.5))
     
-    # Prepare tooltip text
-    tooltip_text_expr_str <- if ("Rocket_Name" %in% names(plot_df_filtered)) { 
+    tooltip_text_expr_str <- if ("Rocket_Name" %in% names(plot_df_filtered)) {
       sprintf(
         "paste0('Rocket: ', .data[['Rocket_Name']], '<br>', '%s: ', format(.data[['%s']], big.mark=',' , scientific=FALSE), '<br>', '%s: ', format(.data[['%s']], big.mark=',', scientific=FALSE))",
         str_replace_all(input$x_var_config, "_", " "), input$x_var_config,
@@ -485,8 +549,7 @@ server <- function(input, output, session) {
         str_replace_all(input$y_var_config, "_", " "), input$y_var_config
       )
     }
-    # Add text aesthetic separately for tooltip
-    p <- p + aes(text = !!rlang::parse_expr(tooltip_text_expr_str)) 
+    p <- p + aes(text = !!rlang::parse_expr(tooltip_text_expr_str))
     
     ggplotly(p, tooltip = "text") %>%
       layout(
