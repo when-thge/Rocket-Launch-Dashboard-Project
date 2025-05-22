@@ -7,103 +7,52 @@ library(tidyverse)
 library(tidymodels)
 library(xgboost)
 library(shiny)
-# library(shinythemes) # bslib handles theming now
 library(bslib)
 library(plotly)
 library(here)
-library(thematic) # For ggplot theme consistency
+library(thematic) 
 
 # --- Data Loading and Initial Preparation ---
-# Ensure your CSV path is correct
 raw_data <- read_csv(here::here("./Aggregated_Launch_Mission_Configs.csv")) |>
   mutate(
     `Launch_Status` = as.factor(`Launch_Status`),
     across(
       c(
-        `Fairing_Height`,
-        `Fairing_Diameter`,
-        `Rocket_Height`,
-        `Payload_to_LEO`,
-        `Payload_to_GTO`,
-        `Liftoff_Thrust`
+        "Fairing_Height", "Fairing_Diameter", "Rocket_Height",
+        "Payload_to_LEO", "Payload_to_GTO", "Liftoff_Thrust"
       ),
-      ~ as.numeric(str_remove_all(str_remove_all(., ","), "[^0-9.]"))
-    )
+      ~ as.numeric(str_remove_all(str_remove_all(as.character(.), ","), "[^0-9.]+"))
+    ),
+    # Ensure other model predictors are numeric
+    Stages = as.numeric(Stages),
+    Strap_Ons = as.numeric(Strap_Ons),
+    Payloads = as.numeric(Payloads),
+    Mass = as.numeric(Mass)
   )
 
 data <- raw_data |>
   select(
-    Launch_Year,
-    Rocket_Name,
-    Rocket_Organisation,
-    Launch_Status
+    Launch_Year, Rocket_Name, Rocket_Organisation, Launch_Status
   )
 
 config_data <- raw_data |>
   select(
-    Rocket_Name, # Ensure Rocket_Name is here for filtering
-    Fairing_Height,
-    Fairing_Diameter,
-    Rocket_Height,
-    Payload_to_LEO,
-    Payload_to_GTO,
-    Stages,
-    Strap_Ons,
-    Liftoff_Thrust,
-    Payloads,
-    Mass
+    Rocket_Name, Fairing_Height, Fairing_Diameter, Rocket_Height,
+    Payload_to_LEO, Payload_to_GTO, Stages, Strap_Ons,
+    Liftoff_Thrust, Payloads, Mass
   ) |>
-  drop_na(Rocket_Name)
+  drop_na(Rocket_Name) |> 
+  mutate(across(where(is.character) & !c(Rocket_Name), as.numeric))
 
-# Ensure your RDS model path is correct
-model <- readRDS(here::here("./rocket_launch_model_boosted_tree.rds"))
 
 rocket_param_choices <- c(
-  "Fairing_Height",
-  "Fairing_Diameter",
-  "Rocket_Height",
-  "Payload_to_LEO",
-  "Payload_to_GTO",
-  "Stages",
-  "Strap_Ons",
-  "Liftoff_Thrust",
-  "Payloads",
-  "Mass"
+  "Fairing_Height", "Fairing_Diameter", "Rocket_Height",
+  "Payload_to_LEO", "Payload_to_GTO", "Stages", "Strap_Ons",
+  "Liftoff_Thrust", "Payloads", "Mass"
 )
-
-# --- Prediction Function ---
-predict_launch <- function(Fairing_Height,
-                           Fairing_Diameter,
-                           Rocket_Height,
-                           Payload_to_LEO,
-                           Payload_to_GTO,
-                           Stages,
-                           Strap_Ons,
-                           Liftoff_Thrust,
-                           Payloads,
-                           Mass) {
-  observation <- tibble(
-    Fairing_Height = Fairing_Height,
-    Fairing_Diameter = Fairing_Diameter,
-    Rocket_Height = Rocket_Height,
-    Payload_to_LEO = Payload_to_LEO,
-    Payload_to_GTO = Payload_to_GTO,
-    Stages = Stages,
-    Strap_Ons = Strap_Ons,
-    Liftoff_Thrust = Liftoff_Thrust,
-    Payloads = Payloads,
-    Mass = Mass
-  )
-  
-  prediction <- predict(model, observation)
-  
-  return(prediction$.pred_class)
-}
-
 
 # --- Global Theme and Plot Styling ---
 thematic::thematic_shiny(font = "auto")
-
 ggplot_theme_transparent <- theme(
   plot.background = element_rect(fill = "transparent", colour = NA),
   panel.background = element_rect(fill = "transparent", colour = NA),
@@ -111,22 +60,102 @@ ggplot_theme_transparent <- theme(
   panel.grid.major = element_line(linewidth = 0.25),
   panel.grid.minor = element_line(linewidth = 0.1)
 )
-
 dark_mode_text_color <- "#adb5bd"
 light_mode_text_color <- "#212529"
 dark_mode_secondary_text_color <- "#6c757d"
 light_mode_secondary_text_color <- "#6c757d"
-
 dark_mode_grid_color <- "rgba(173, 181, 189, 0.2)"
 light_mode_grid_color <- "rgba(33, 37, 41, 0.1)"
-
 
 # --- UI Definition ---
 ui <- page_navbar(
   title = "Rocket Launches Dashboard",
+  tags$head(
+    tags$style(HTML("
+      /* Ensure numeric inputs match dark theme */
+      .shiny-input-container input[type='number'].form-control {
+        background-color: #2A2A2A !important; /* Cyborg input background */
+        color: #adb5bd !important;             /* Cyborg input text color */
+        border: 1px solid #444 !important;   /* Cyborg input border */
+      }
+      .card-header .bs-icon { margin-right: 0.3rem; } /* Add some space between icon and text */
+    "))
+  ),
   
   nav_panel(
     title = "Time Series Analysis",
+    icon = bsicons::bs_icon("bar-chart-line-fill"),
+    layout_sidebar(
+      sidebar = sidebar(
+        width = 300,
+        title = "Filter by...",
+        accordion(
+          accordion_panel(
+            title = "Year",
+            icon = bsicons::bs_icon("calendar-range", size = "2rem"),
+            sliderInput("year_slider", "Filter by Year",
+                        min = min(data$Launch_Year, na.rm = TRUE),
+                        max = max(data$Launch_Year, na.rm = TRUE),
+                        value = c(min(data$Launch_Year, na.rm = TRUE), max(data$Launch_Year, na.rm = TRUE)),
+                        step = 1, tick = FALSE, sep = "")
+          ),
+          accordion_panel(
+            title = "Rocket",
+            icon = bsicons::bs_icon("rocket-takeoff", size = "2rem"),
+            selectizeInput("select_rocket", "Filter by Rocket:",
+                           choices = unique(data$Rocket_Name), multiple = TRUE,
+                           options = list(placeholder = "Select rocket(s)..."))
+          ),
+          accordion_panel(
+            title = "Organization",
+            icon = bsicons::bs_icon("buildings", size = "2rem"),
+            selectizeInput("select_organization", "Filter by Organization:",
+                           choices = unique(data$Rocket_Organisation), multiple = TRUE,
+                           options = list(placeholder = "Select Organization(s)..."))
+          )
+        )
+      ),
+      div( # Main content area for Time Series Analysis
+        div(
+          h4("Launch Counts by Year & Status Overview", style = "margin-bottom: 1rem;"),
+          layout_columns(
+            col_widths = c(3, 3, 3, 3),
+            value_box(
+              title = "Success",
+              value = textOutput("success_vbox"),
+              showcase = bsicons::bs_icon("check-circle", size = "2.5rem"),
+              showcase_layout = "top right",
+              theme = "success"
+            ),
+            value_box(
+              title = "Partial Failure",
+              value = textOutput("partial_failure_vbox"),
+              showcase = bsicons::bs_icon("exclamation-triangle", size = "2.5rem"),
+              showcase_layout = "top right",
+              theme = "warning"
+            ),
+            value_box(
+              title = "Failure",
+              value = textOutput("failure_vbox"),
+              showcase = bsicons::bs_icon("x-circle", size = "2.5rem"),
+              showcase_layout = "top right",
+              theme = "danger"
+            ),
+            value_box(
+              title = "Prelaunch Failure",
+              value = textOutput("prelaunch_failure_vbox"),
+              showcase = bsicons::bs_icon("dash-circle", size = "2.5rem"),
+              showcase_layout = "top right",
+              theme = "secondary"
+            )
+          ),
+          plotlyOutput(outputId = "Time_series_line", height = "680px") 
+        )
+      )
+    )
+  ),
+  nav_panel(
+    title = "Success Rate of Rocket Launches",
     icon = bsicons::bs_icon("graph-up"),
     layout_sidebar(
       sidebar = sidebar(
@@ -158,91 +187,15 @@ ui <- page_navbar(
           )
         )
       ),
-      div(
-        layout_columns(
-          col_widths = c(8, 4),
-          div(
-            h4("Launch Counts by Year & Status Overview", style = "margin-bottom: 1rem;"),
-            layout_columns(
-              col_widths = c(3, 3, 3, 3),
-              value_box(
-                title = "Success",
-                value = textOutput("success_vbox"),
-                showcase = bsicons::bs_icon("check-circle", size = "2.5rem"),
-                showcase_layout = "top right",
-                theme = "success"
-              ),
-              value_box(
-                title = "Partial Failure",
-                value = textOutput("partial_failure_vbox"),
-                showcase = bsicons::bs_icon("exclamation-triangle", size = "2.5rem"),
-                showcase_layout = "top right",
-                theme = "warning"
-              ),
-              value_box(
-                title = "Failure",
-                value = textOutput("failure_vbox"),
-                showcase = bsicons::bs_icon("x-circle", size = "2.5rem"),
-                showcase_layout = "top right",
-                theme = "danger"
-              ),
-              value_box(
-                title = "Prelaunch Failure",
-                value = textOutput("prelaunch_failure_vbox"),
-                showcase = bsicons::bs_icon("dash-circle", size = "2.5rem"),
-                showcase_layout = "top right",
-                theme = "secondary"
-              )
-            ),
-            plotlyOutput(outputId = "Time_series_line", height = "620px") # Fixed height plot
-          ),
-          div(
-            style = "text-align: center;",
-            h4("Understanding Launch Activity & Outcomes", style = "margin-bottom: 1rem;"),
-            tags$p("This section provides a dual view of rocket launch history: aggregate statistics and yearly trends. The value boxes above offer a quick snapshot of total launch outcomes (Success, Partial Failure, Failure, Prelaunch Failure) based on your current filter selections (year range, specific rockets, or organizations)."),
-            tags$p("Below them, the stacked bar chart offers a granular, year-by-year visualization. Each bar represents a year, and its segments show the count of launches by their outcome. This allows for an intuitive comparison of launch volume and success profiles over time."),
-            tags$strong("What to look for:"),
-            tags$ul(
-              style = "display: inline-block; text-align: left; margin-top: 0.5rem;",
-              tags$li(tags$strong("Overall Trends:"), " Are there distinct eras of increased or decreased launch activity? Do failure rates seem to concentrate in certain periods?"),
-              tags$li(tags$strong("Proportional Changes:"), " Observe how the proportion of successful launches to failures changes year-over-year. A tall bar with a large green segment is ideal!"),
-              tags$li(tags$strong("Impact of Filters:"), " When you filter by specific rockets or organizations, how does their performance profile compare to the overall trends? Does a particular rocket show a learning curve with initially higher failures followed by improvements?"),
-              tags$li(tags$strong("Anomalies:"), " Are there specific years with unusually high numbers of a particular outcome (e.g., a spike in failures)?"),
-              tags$li(tags$strong("Data Context:"), " Remember that the data reflects reported launches. The definition of 'Partial Failure' can vary, and not all launch activities might be public.")
-            ),
-            tags$p("Use the sidebar filters to dynamically explore these patterns for different subsets of the data.")
-          )
-        ),
-        
-        br(),
-        
-        layout_columns(
-          col_widths = c(4, 8),
-          div(
-            style = "text-align: center;",
-            h4("Analyzing Launch Reliability Over Time", style = "margin-bottom: 1rem;"),
-            tags$p("This line graph specifically tracks the evolution of launch success rates. We define success on a weighted scale: a full 'Success' contributes 1.0, a 'Partial Failure' contributes 0.5, and other outcomes contribute 0.0 to the yearly average. This provides a nuanced view beyond a simple binary success/failure metric."),
-            tags$p("The size of each point on the line corresponds to the total number of launches in that year. Larger points indicate that the success rate for that year is based on a more substantial sample of launches, making it a more statistically robust data point."),
-            tags$strong("Key questions this chart helps answer:"),
-            tags$ul(
-              style = "display: inline-block; text-align: left; margin-top: 0.5rem;",
-              tags$li(tags$strong("Reliability Trajectory:"), " Is the overall trend in launch success rates upwards (indicating improving reliability), downwards, or volatile?"),
-              tags$li(tags$strong("Inflection Points:"), " Are there specific years or periods where the success rate changed significantly? What might have driven these changes (e.g., introduction of new technologies, changes in operational procedures, specific high-profile failures impacting subsequent designs)?"),
-              tags$li(tags$strong("Volume vs. Rate:"), " How does the success rate correlate with launch volume (point size)? Are periods of high launch activity associated with higher or lower success rates? A high success rate on many launches is a strong indicator of maturity."),
-              tags$li(tags$strong("Consistency:"), " How consistent is the success rate from year to year? High variability might suggest instability or ongoing challenges in launch operations for the selected scope."),
-              tags$li(tags$strong("Filtered Insights:"), " When filtering by specific rockets or organizations, does their success rate trend differ from the global average? Does it show a faster improvement curve or periods of notable decline?")
-            ),
-            tags$p("Combining insights from this chart with the launch count chart above can provide a comprehensive understanding of both the quantity and quality of launch activities.")
-          ),
-          div(
-            h4("Success Rate Trend Over Time", style = "margin-bottom: 1rem;"),
-            plotlyOutput(outputId = "success_rate_trend", height = "800px") # Fixed height plot
-          )
+      div( # Main content area for Time Series Analysis
+        div(
+          h4("Success Rate Trend Over Time", style = "margin-bottom: 1rem;"),
+          plotlyOutput(outputId = "success_rate_trend", height = "840px") 
         )
       )
     )
   ),
-  
+  # --- MODIFIED: Individual Rocket Parameters Tab ---
   nav_panel(
     title = "Individual Rocket Parameters",
     icon = bsicons::bs_icon("rocket-takeoff"),
@@ -278,13 +231,15 @@ ui <- page_navbar(
           )
         )
       ),
-      card(
-        card_body_fill(
-          plotlyOutput("rocket_params_plot", height = "calc(100vh - 200px)")
-        )
+      # Replaced card with div and added uiOutput for header
+      div(
+        style = "padding: 1rem;", # Optional: adds some spacing around the content
+        uiOutput("rocket_params_plot_header_ui"), 
+        plotlyOutput("rocket_params_plot", height = "calc(100vh - 230px)") # Adjusted height for header
       )
     )
   ),
+  # --- END MODIFICATION ---
   
   # --- PREDICTION MODEL TAB ---
   nav_panel(
@@ -293,77 +248,74 @@ ui <- page_navbar(
     layout_columns(
       fill = TRUE,
       fillable = TRUE,
-      col_widths = c(4, 4, 4),
+      col_widths = c(6, 6), 
       gap = "1rem",
       
-      # --- Content for the FIRST main column (col_width = 4) ---
       list(
         h5("Rocket Parameters", style = "margin-bottom: 0.5rem; text-align: center;"),
         layout_columns(
           fill = TRUE,
           fillable = TRUE,
-          col_widths = c(6, 6),
+          col_widths = c(6, 6), 
           row_heights = rep("1fr", 5),
           gap = "0.5rem",
           
-          card(card_header("Fairing Height"), card_body_fill("Content for card 1, col 1, row 1")),
-          card(card_header("Fairing Diameter"), card_body_fill("Content for card 1, col 2, row 1")),
-          card(card_header("Rocket Height"), card_body_fill("Content for card 1, col 1, row 2")),
-          card(card_header("Payload to LEO"), card_body_fill("Content for card 1, col 2, row 2")),
-          card(card_header("Payload to GTO"), card_body_fill("Content for card 1, col 1, row 3")),
-          card(card_header("Stages"), card_body_fill("Content for card 1, col 2, row 3")),
-          card(card_header("Strap-Ons"), card_body_fill("Content for card 1, col 1, row 4")),
-          card(card_header("Liftoff Thrust"), card_body_fill("Content for card 1, col 2, row 4")),
-          card(card_header("Payloads"), card_body_fill("Content for card 1, col 1, row 5")),
-          card(card_header("Mass"), card_body_fill("Content for card 1, col 2, row 5"))
-        )
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("arrows-vertical"), "Fairing Height")), 
+                card_body( numericInput(inputId = "fheight_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                # MODIFIED ICON for Fairing Diameter
+                card_header(tagList(bsicons::bs_icon("circle"), "Fairing Diameter")), 
+                card_body( numericInput(inputId = "fdiameter_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("rulers"), "Rocket Height")), 
+                card_body( numericInput(inputId = "rheight_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("box-seam"), "Payload to LEO")), 
+                card_body( numericInput(inputId = "payloadleo_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("box-arrow-up"), "Payload to GTO")), 
+                card_body( numericInput(inputId = "payloadgto_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("stack"), "Stages")), 
+                card_body( numericInput(inputId = "stages_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("plus-square-dotted"), "Strap-Ons")), 
+                card_body( numericInput(inputId = "strapons_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("fire"), "Liftoff Thrust")), 
+                card_body( numericInput(inputId = "lthrust_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("boxes"), "Payloads")), 
+                card_body( numericInput(inputId = "payloads_input", value = 0, label = " ", width="100%") ) ),
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("speedometer2"), "Mass")), 
+                card_body( numericInput(inputId = "mass_input", value = 0, label = " ", width="100%") ) )
+        ) 
       ),
       
-      # --- Content for the SECOND main column (col_width = 4) ---
       list(
         h5("Launch Status and Price Predictions", style = "margin-bottom: 0.5rem; text-align: center;"),
         layout_columns(
-          fill = TRUE,
-          fillable = TRUE,
-          col_widths = 12,
-          row_heights = c("1fr", "1fr"),
-          gap = "0.5rem",
-          
-          card(card_header("Card 2.1"), card_body_fill("Content for card 2, row 1")),
-          card(card_header("Card 2.2"), card_body_fill("Content for card 2, row 2"))
-        )
-      ),
-      
-      # --- Content for the THIRD main column (col_width = 4) ---
-      list(
-        h5("Column 3: 1x2 Cards", style = "margin-bottom: 0.5rem; text-align: center;"),
-        layout_columns(
-          fill = TRUE,
-          fillable = TRUE,
-          col_widths = 12,
-          row_heights = c("1fr", "1fr"),
-          gap = "0.5rem",
-          
-          card(card_header("Card 3.1"), card_body_fill("Content for card 3, row 1")),
-          card(card_header("Card 3.2"), card_body_fill("Content for card 3, row 2"))
+          fill = TRUE, fillable = TRUE, col_widths = 12, 
+          row_heights = c("auto", "auto"), gap = "0.5rem",
+          card( class = "bg-transparent border-secondary", 
+                card_header(tagList(bsicons::bs_icon("clipboard-data"), "Predicted Launch Status")), 
+                card_body(tags$p("Prediction results will appear here.", style = "text-align: center; padding: 1rem; color: #6c757d;"))),
+          actionButton("predict_button", "Predict Launch Status",
+                       icon = icon(name = "circle-play", lib = "font-awesome"), 
+                       class = "btn-primary w-100 mt-3")
         )
       )
     )
   ),
-  # --- END PREDICTION MODEL TAB ---
   
-  nav_panel(
-    title = "About",
-    icon = bsicons::bs_icon("info-circle")
-  ),
+  nav_panel(title = "About", icon = bsicons::bs_icon("info-circle")),
   nav_spacer(),
-  nav_item(
-    input_dark_mode(id = "mode")
-  ),
+  nav_item(input_dark_mode(id = "mode")),
   
   theme = bs_theme(
-    version = 5,
-    bootswatch = "cyborg",
+    version = 5, bootswatch = "cyborg",
     base_font = font_google("Exo 2", local = FALSE),
     heading_font = font_google("Orbitron", local = FALSE),
     "font-size-base" = "0.92rem"
@@ -452,6 +404,7 @@ server <- function(input, output, session) {
     
     min_plot_year <- min(status_counts_by_year$Launch_Year, na.rm = TRUE)
     xaxis_tick0 <- floor(min_plot_year / 5) * 5
+    
     p <- ggplot(status_counts_by_year, aes(x = Launch_Year, y = count, fill = Launch_Status)) +
       geom_bar(stat = "identity", position = "stack", width = 0.9) +
       scale_fill_manual(values = custom_bar_fill_colors, name = "Launch Status", drop = FALSE) +
@@ -488,6 +441,19 @@ server <- function(input, output, session) {
              yaxis = list(gridcolor = cols$grid, linecolor = cols$grid, zerolinecolor = cols$grid, titlefont = list(color = cols$secondary_fg), tickfont = list(color = cols$secondary_fg)),
              legend = list(orientation = "h", yanchor = "bottom", y = 1.02, xanchor = "right", x = 1, font = list(color = cols$fg), bgcolor = "rgba(0,0,0,0.1)"))
   })
+  
+  # --- ADDED: Server logic for the dynamic plot header ---
+  output$rocket_params_plot_header_ui <- renderUI({
+    req(input$x_var_config, input$y_var_config)
+    
+    # Format variable names for the title (e.g., "Payload To LEO" from "Payload_to_LEO")
+    pretty_y_var <- tools::toTitleCase(tolower(str_replace_all(input$y_var_config, "_", " ")))
+    pretty_x_var <- tools::toTitleCase(tolower(str_replace_all(input$x_var_config, "_", " ")))
+    
+    title_text <- paste(pretty_y_var, "vs.", pretty_x_var)
+    h4(title_text, style = "margin-bottom: 1rem; text-align: center;") # Centered title
+  })
+  # --- END ADDITION ---
   
   output$rocket_params_plot <- renderPlotly({
     cols <- plot_colors()
@@ -530,11 +496,14 @@ server <- function(input, output, session) {
     
     p <- ggplot(plot_df_filtered, aes(x = .data[[input$x_var_config]], y = .data[[input$y_var_config]])) +
       geom_point(color = cols$primary, alpha = 0.6, size = 4) +
-      labs(x = str_replace_all(input$x_var_config, "_", " "),
-           y = str_replace_all(input$y_var_config, "_", " ")) +
+      labs(
+        # Labels for axes are good, title is handled by the h4 above and/or plotly layout title
+        x = tools::toTitleCase(tolower(str_replace_all(input$x_var_config, "_", " "))), 
+        y = tools::toTitleCase(tolower(str_replace_all(input$y_var_config, "_", " ")))
+      ) +
       theme_minimal() +
       ggplot_theme_transparent +
-      theme(plot.title = element_text(hjust = 0.5))
+      theme(plot.title = element_text(hjust = 0.5)) # ggplot's internal title, can be removed if preferred
     
     tooltip_text_expr_str <- if ("Rocket_Name" %in% names(plot_df_filtered)) {
       sprintf(
@@ -551,13 +520,18 @@ server <- function(input, output, session) {
     }
     p <- p + aes(text = !!rlang::parse_expr(tooltip_text_expr_str))
     
+    # Note: The plotly layout title might be redundant with the h4 header.
+    # You can remove `title = list(...)` from layout() if you only want the h4 header.
+    # Or, set layout(title = list(text = "")) to remove the plotly internal title.
     ggplotly(p, tooltip = "text") %>%
       layout(
-        title = list(
-          text = paste(str_replace_all(input$y_var_config, "_", " "), "vs.", str_replace_all(input$x_var_config, "_", " ")),
-          x = 0.5, xanchor = 'center',
-          font = list(color = cols$fg)
-        ),
+        # title = list( # This is the title INSIDE the plotly canvas
+        #   text = paste(tools::toTitleCase(tolower(str_replace_all(input$y_var_config, "_", " "))), 
+        #                "vs.", 
+        #                tools::toTitleCase(tolower(str_replace_all(input$x_var_config, "_", " ")))),
+        #   x = 0.5, xanchor = 'center',
+        #   font = list(color = cols$fg)
+        # ),
         paper_bgcolor = "rgba(0,0,0,0)",
         plot_bgcolor = "rgba(0,0,0,0)",
         font = list(color = cols$fg),
@@ -579,6 +553,5 @@ server <- function(input, output, session) {
   })
 }
 
-# --- Run the Shiny Application ---
 shinyApp(ui, server)
 
