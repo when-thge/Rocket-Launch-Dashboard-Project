@@ -1,0 +1,13 @@
+name: Rocket-Launch-Dashboard-Project-Test
+title: Rocket-Launch-Dashboard-Project
+username: wetcatto
+account: wetcatto
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 14798432
+bundleId: 10320807
+url: https://wetcatto.shinyapps.io/Rocket-Launch-Dashboard-Project-Test/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: Aggregated_Launch_Mission_Configs.csv|LICENSE|one_time_preprocess.R|README.md|Rocket_Launch_Dashboard.R|Rocket_Launch_Model.R|rocket_price_model.R|rocket_price_model_v2.rds|rocket_price_model_v2_knn.rds|rsconnect-python.json
